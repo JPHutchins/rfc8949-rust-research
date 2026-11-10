@@ -10,6 +10,19 @@
 - **Every CBOR crate generates code per type, and every per-type approach measured lands in the same band** (roughly 0.9–1.8 KB per enum/nested type). Only a table-driven design changes the slope: Munns measured −38% total `.text` (−59% without enums) for postcard-forth vs serde. No CBOR crate has tried it, so the CBOR gain is **unmeasured**.
 - **Fixed cost** (fit intercept, opt-level z): cbor-smol about 3.3 KB (partial CBOR); minicbor hand-written about 6.7–7.2 KB; minicbor-derive about 7.7–8.5 KB; minicbor-serde about 9.4–9.5 KB; serde_cbor about 17.6 KB. In minicbor the fixed cost is mostly decoder primitives (`type_of`, `unsigned`, `str`, `bytes`, `map`: about 1.5 KB), `memcpy` (744 B) and UTF-8 validation (`from_utf8` 368 B plus a 256 B table).
 
+## Why serde backends differ: two multiplying factors
+
+Per-type flash ≈ (format-method instantiations per type, **set by serde_derive**) × (bytes per instantiation, **set by the format crate**). Munns, dtolnay and this measurement each address a different factor. They do not disagree.
+
+| Factor | Who addresses it | Evidence |
+|---|---|---|
+| Instantiations per type (derive side) | **dtolnay**: serde_derive's per-struct `__Field` type "instantiat[es] the `Deserializer`'s methods with it". One non-generic `DeserializeSeed` "would reduce the number of instantiations of `Deserializer` methods by 50%". Ultimately he wants "type-erased bytecode", making impls "basically a single `static`". | `sources/munns/serde-pr2250-dtolnay-review-2023-08-06.txt`; serde_derive 1.0.229 still emits `__Field` (`src/de/struct_.rs`, `identifier.rs`) |
+| Bytes per instantiation (format side) | **this repo**: serde_cbor's `Deserializer::parse_value` is generic over the visitor, giving 5 copies at 1,450–2,252 B in the flat N=4 binary. minicbor-serde's largest symbols are non-generic primitives compiled once (`Decoder::skip` 2,096, `type_of` 362, `unsigned` 316, `str` 240 B), with thin generic shims inlined into callers. | `nm -S --size-sort` on `cs-serde_cbor-n4` / `cs-minicbor-serde-n4` |
+| Format-side erasure was tried | **dtolnay**, serde-rs/json#687 "Optimize compile time of Deserializer trait methods": "instantiate the control flow in these methods once per Read type rather than once per Visitor type" (−44% compile time). Closed unmerged. In the #2250 review he calls this "unsafe manual erasing" that formats should not need. | `gh pr view 687 -R serde-rs/json` |
+| Remaining per-type floor | **Munns**: even with a lean format (postcard), serde's per-type codegen remains. Table-driven postcard-forth: −38% `.text`, −59% without enums. | `sources/munns/postcard-forth-rp2040-results-2024-06.md` |
+
+Implication: an opt-in serde layer should keep its generic `Deserializer` methods as thin shims over non-generic primitives, as minicbor-serde does. That minimizes the format-side factor. The derive-side factor can only be removed by a native table-driven derive, or by serde itself changing.
+
 ## Results
 
 Flash = `.text + .rodata + .data`. "Marginal" is the least-squares slope over N ∈ {1, 2, 4, 8, 16, 32} message types, and "fixed" is the intercept. N=0 is 36 B for every backend.
