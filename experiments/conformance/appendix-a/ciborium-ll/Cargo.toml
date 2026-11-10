@@ -1,0 +1,8 @@
+[package]
+name = "ciborium-ll-appendix-a"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[dependencies]
+ciborium-io = { version = "=0.2.2", default-features = false }
+ciborium-ll = { version = "=0.2.2", default-features = false }

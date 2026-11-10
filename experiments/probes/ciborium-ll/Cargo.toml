@@ -1,0 +1,27 @@
+[package]
+name = "probe-ciborium-ll"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "probe"
+
+[[bin]]
+name = "probe-ciborium-ll"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+ciborium-io = { version = "=0.2.2", default-features = false }
+ciborium-ll = { version = "=0.2.2", default-features = false }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1

@@ -1,0 +1,28 @@
+[package]
+name = "probe-serde_cbor_2"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "probe"
+
+[[bin]]
+name = "probe-serde_cbor_2"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+serde_cbor_2 = { version = "=0.13.0", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"] }
+serde_bytes = { version = "0.11", default-features = false }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1

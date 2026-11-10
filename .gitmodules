@@ -1,3 +1,33 @@
 [submodule "sources/test-vectors"]
 	path = sources/test-vectors
 	url = https://github.com/cbor/test-vectors.git
+[submodule "vendor/cbor-smol"]
+	path = vendor/cbor-smol
+	url = https://github.com/trussed-dev/cbor-smol
+[submodule "vendor/cbor4ii"]
+	path = vendor/cbor4ii
+	url = https://github.com/quininer/cbor4ii
+[submodule "vendor/cbor_event"]
+	path = vendor/cbor_event
+	url = https://github.com/primetype/cbor_event
+[submodule "vendor/ciborium"]
+	path = vendor/ciborium
+	url = https://github.com/enarx/ciborium
+[submodule "vendor/facet-cbor"]
+	path = vendor/facet-cbor
+	url = https://github.com/bearcove/vox
+[submodule "vendor/minicbor"]
+	path = vendor/minicbor
+	url = https://github.com/twittner/minicbor
+[submodule "vendor/serde_cbor"]
+	path = vendor/serde_cbor
+	url = https://github.com/pyfisch/cbor
+[submodule "vendor/serde_cbor_2"]
+	path = vendor/serde_cbor_2
+	url = https://github.com/kanidm/cbor
+[submodule "vendor/sk-cbor"]
+	path = vendor/sk-cbor
+	url = https://github.com/google/OpenSK
+[submodule "vendor/tinycbor"]
+	path = vendor/tinycbor
+	url = https://github.com/carloskiki/tinycbor
