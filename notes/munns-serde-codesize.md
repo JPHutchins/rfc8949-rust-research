@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-- **Best match for the remembered video:** Self-Directed Research (SDR) episode **"A different serde"** (2024-11-27). James presents it and Amos co-hosts. Video: <https://www.youtube.com/watch?v=qlvr4wqAIfg>. A full transcript is published on the [episode page](https://sdr-podcast.com/episodes/a-different-serde/). This is the best candidate, not confirmed as the one the user remembers. I found no other video presented by Munns that focuses on this topic, though S2 and S4 touch on it.
+- **The remembered video (user-confirmed):** Self-Directed Research (SDR) episode **"A different serde"** (2024-11-27). James presents it and Amos co-hosts. Video: <https://www.youtube.com/watch?v=qlvr4wqAIfg>. A full transcript is published on the [episode page](https://sdr-podcast.com/episodes/a-different-serde/). S2 and S4 touch on the same topic.
 - **How the bloat happens, in his words:** serde's derive writes visitor-driving code for each type. That code is generic, so the compiler "stamp[s] out a version" for each serializer. The optimizer then inlines those copies into large functions, which are repeated at every inline site, and this "end[s] up as a lot of code in your binary".
 - **Flash numbers he measured:** RP2040 firmware (`thumbv6m`, `opt-level="s"`, LTO), 512 generated nested types, round-tripped through deserialize and serialize:
   - postcard+serde `.text` was **640,456 B**; postcard-forth was **395,712 B** (61.8%).
