@@ -10,7 +10,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import NamedTuple
 
-from backends import BACKENDS, Backend, FieldKind
+from backends import BACKENDS, Backend, rust_type
+from model import Field, FieldKind, Message
 
 
 HERE = Path(__file__).resolve().parent
@@ -19,20 +20,6 @@ KEY_POOL = (
     "permanent name mtu count seq group id flags ts value status msg err buf size"
 ).split()
 TARGET = "thumbv7m-none-eabi"
-
-
-class Field(NamedTuple):
-    key: str
-    kind: FieldKind
-
-
-class Message(NamedTuple):
-    name: str
-    fields: tuple[Field, ...]
-
-    @property
-    def borrows(self) -> bool:
-        return any(field.kind in (FieldKind.STR, FieldKind.BYTES) for field in self.fields)
 
 
 class Measurement(NamedTuple):
@@ -60,25 +47,24 @@ def message(index: int) -> Message:
 
 
 def render_message(backend: Backend, msg: Message) -> str:
-    lifetime = "<'a>" if msg.borrows else ""
     fields = "\n".join(
-        f"    {backend.field_attrs(field.kind, field.key, position)}pub f_{field.key}: {backend.rust_type(field.kind)},"
+        f"    {backend.field_attrs(field, position)}pub {field.ident}: {rust_type(field.kind)},"
         for position, field in enumerate(msg.fields)
     )
-    return f"{backend.struct_attrs}\npub struct {msg.name}{lifetime} {{\n{fields}\n}}\n"
+    return f"{backend.struct_attrs}\npub struct {msg.name}{msg.lifetime} {{\n{fields}\n}}\n"
 
 
 def render_crate(backend: Backend, message_count: int) -> dict[str, str]:
     messages = tuple(map(message, range(message_count)))
     calls = "\n".join(
-        f"    black_box(roundtrip_{m.name.lower()}(input, out));" for m in messages
+        f"    black_box({m.fn_name}(input, out));" for m in messages
     )
     main = (
         "#![no_std]\n#![no_main]\n#![allow(dead_code)]\n\n"
         "use core::hint::black_box;\n\n"
         f"{backend.prelude}\n"
         "#[panic_handler]\nfn panic(_: &core::panic::PanicInfo) -> ! {\n    loop {}\n}\n\n"
-                + "\n".join(render_message(backend, m) + "\n" + backend.roundtrip(m.name) for m in messages)
+                + "\n".join(render_message(backend, m) + "\n" + backend.impls(m) + "\n" + backend.roundtrip(m) for m in messages)
         + "\n#[unsafe(no_mangle)]\npub extern \"C\" fn _start() -> ! {\n"
         "    let input: &[u8] = unsafe { core::slice::from_raw_parts(black_box(0x2000_0000usize) as *const u8, black_box(256)) };\n"
         "    let out: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(black_box(0x2000_1000usize) as *mut u8, black_box(256)) };\n"
