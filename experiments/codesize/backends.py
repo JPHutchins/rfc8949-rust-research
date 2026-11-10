@@ -1,9 +1,9 @@
-"""Codec backends: how each crate spells a message struct and a decode-then-encode roundtrip."""
+"""Codec backends: how each crate spells message structs, enums and a decode-then-encode roundtrip."""
 
 from collections.abc import Callable
 from typing import NamedTuple
 
-from model import Field, FieldKind, Message
+from model import EnumDef, Field, FieldKind, Message
 
 
 class Backend(NamedTuple):
@@ -12,26 +12,33 @@ class Backend(NamedTuple):
     prelude: str
     struct_attrs: str
     field_attrs: Callable[[Field, int], str]
+    enum_def: Callable[[EnumDef], str]
     impls: Callable[[Message], str]
     roundtrip: Callable[[Message], str]
 
 
-def rust_type(kind: FieldKind) -> str:
-    match kind:
-        case FieldKind.U32:
+def rust_type(field: Field) -> str:
+    match (field.kind, field.target):
+        case (FieldKind.NESTED, Message() as nested):
+            return f"{nested.name}{nested.lifetime}"
+        case (FieldKind.ENUM, EnumDef(name)):
+            return name
+        case (FieldKind.U32, _):
             return "u32"
-        case FieldKind.U64:
+        case (FieldKind.U64, _):
             return "u64"
-        case FieldKind.I32:
+        case (FieldKind.I32, _):
             return "i32"
-        case FieldKind.BOOL:
+        case (FieldKind.BOOL, _):
             return "bool"
-        case FieldKind.OPT_U32:
+        case (FieldKind.OPT_U32, _):
             return "Option<u32>"
-        case FieldKind.STR:
+        case (FieldKind.STR, _):
             return "&'a str"
-        case FieldKind.BYTES:
+        case (FieldKind.BYTES, _):
             return "&'a [u8]"
+        case (FieldKind.NESTED | FieldKind.ENUM, _):
+            raise ValueError(f"{field} lacks its target")
 
 
 def no_impls(_msg: Message) -> str:
@@ -56,13 +63,19 @@ SERDE_DEPS = (
 SERDE_DERIVE = "#[derive(serde::Serialize, serde::Deserialize)]"
 
 
+def serde_enum_def(enum: EnumDef) -> str:
+    return f"{SERDE_DERIVE}\npub enum {enum.name} {{ A, B(u32), C {{ x: u32, y: bool }} }}\n"
+
+
 def serde_map_field_attrs(field: Field, _position: int) -> str:
     match field.kind:
         case FieldKind.BYTES:
             return f'#[serde(rename = "{field.key}", borrow, with = "serde_bytes")] '
         case FieldKind.OPT_U32:
             return f'#[serde(rename = "{field.key}", default, skip_serializing_if = "Option::is_none")] '
-        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.STR:
+        case FieldKind.NESTED if field.borrows:
+            return f'#[serde(rename = "{field.key}", borrow)] '
+        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.STR | FieldKind.NESTED | FieldKind.ENUM:
             return f'#[serde(rename = "{field.key}")] '
 
 
@@ -70,7 +83,9 @@ def serde_positional_field_attrs(field: Field, _position: int) -> str:
     match field.kind:
         case FieldKind.BYTES:
             return '#[serde(borrow, with = "serde_bytes")] '
-        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.OPT_U32 | FieldKind.STR:
+        case FieldKind.NESTED if field.borrows:
+            return "#[serde(borrow)] "
+        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.OPT_U32 | FieldKind.STR | FieldKind.NESTED | FieldKind.ENUM:
             return ""
 
 
@@ -81,6 +96,7 @@ def serde_backend(name: str, dependency: str, prelude: str, decode: str, encode:
         prelude=prelude,
         struct_attrs=SERDE_DERIVE,
         field_attrs=field_attrs,
+        enum_def=serde_enum_def,
         impls=no_impls,
         roundtrip=roundtrip_fn(decode, encode),
     )
@@ -138,8 +154,17 @@ def minicbor_derive_field_attrs(field: Field, position: int) -> str:
             return f'#[cbor(b({position}), with = "minicbor::bytes")] '
         case FieldKind.STR:
             return f"#[b({position})] "
-        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.OPT_U32:
+        case FieldKind.NESTED if field.borrows:
+            return f"#[b({position})] "
+        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.OPT_U32 | FieldKind.NESTED | FieldKind.ENUM:
             return f"#[n({position})] "
+
+
+def minicbor_derive_enum_def(enum: EnumDef) -> str:
+    return (
+        "#[derive(minicbor::Encode, minicbor::Decode)]\n"
+        f"pub enum {enum.name} {{ #[n(0)] A, #[n(1)] B(#[n(0)] u32), #[n(2)] C {{ #[n(0)] x: u32, #[n(1)] y: bool }} }}\n"
+    )
 
 
 MINICBOR_ROUNDTRIP = roundtrip_fn(
@@ -153,14 +178,15 @@ MINICBOR_DERIVE_INTKEYS = Backend(
     prelude="",
     struct_attrs="#[derive(minicbor::Encode, minicbor::Decode)]\n#[cbor(map)]",
     field_attrs=minicbor_derive_field_attrs,
+    enum_def=minicbor_derive_enum_def,
     impls=no_impls,
     roundtrip=MINICBOR_ROUNDTRIP,
 )
 
 
-def minicbor_encode_call(kind: FieldKind) -> str:
+def minicbor_scalar_method(kind: FieldKind) -> str:
     match kind:
-        case FieldKind.U32:
+        case FieldKind.U32 | FieldKind.OPT_U32:
             return "u32"
         case FieldKind.U64:
             return "u64"
@@ -172,23 +198,33 @@ def minicbor_encode_call(kind: FieldKind) -> str:
             return "str"
         case FieldKind.BYTES:
             return "bytes"
-        case FieldKind.OPT_U32:
-            return "u32"
+        case FieldKind.NESTED | FieldKind.ENUM:
+            raise ValueError(f"{kind} is not a scalar")
 
 
 def minicbor_hand_encode_field(field: Field) -> str:
     match field.kind:
         case FieldKind.OPT_U32:
             return f'        if let Some(v) = self.{field.ident} {{ e.str("{field.key}")?.u32(v)?; }}\n'
+        case FieldKind.NESTED | FieldKind.ENUM:
+            return f'        e.str("{field.key}")?.encode(&self.{field.ident})?;\n'
         case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.STR | FieldKind.BYTES:
-            return f'        e.str("{field.key}")?.{minicbor_encode_call(field.kind)}(self.{field.ident})?;\n'
+            return f'        e.str("{field.key}")?.{minicbor_scalar_method(field.kind)}(self.{field.ident})?;\n'
+
+
+def minicbor_hand_decode_expr(kind: FieldKind) -> str:
+    match kind:
+        case FieldKind.NESTED | FieldKind.ENUM:
+            return "d.decode()?"
+        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.OPT_U32 | FieldKind.STR | FieldKind.BYTES:
+            return f"d.{minicbor_scalar_method(kind)}()?"
 
 
 def minicbor_hand_finish_field(field: Field, position: int) -> str:
     match field.kind:
         case FieldKind.OPT_U32:
             return f"            {field.ident},\n"
-        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.STR | FieldKind.BYTES:
+        case FieldKind.U32 | FieldKind.U64 | FieldKind.I32 | FieldKind.BOOL | FieldKind.STR | FieldKind.BYTES | FieldKind.NESTED | FieldKind.ENUM:
             return f"            {field.ident}: {field.ident}.ok_or_else(|| minicbor::decode::Error::missing_value({position}))?,\n"
 
 
@@ -209,7 +245,7 @@ def minicbor_hand_impls(msg: Message) -> str:
         + '        let entries = d.map()?.ok_or_else(|| minicbor::decode::Error::message("indefinite map"))?;\n'
         "        for _ in 0..entries {\n"
         "            match d.str()? {\n"
-        + "".join(f'                "{f.key}" => {f.ident} = Some(d.{minicbor_encode_call(f.kind)}()?),\n' for f in msg.fields)
+        + "".join(f'                "{f.key}" => {f.ident} = Some({minicbor_hand_decode_expr(f.kind)}),\n' for f in msg.fields)
         + "                _ => d.skip()?,\n"
         "            }\n"
         "        }\n"
@@ -219,12 +255,53 @@ def minicbor_hand_impls(msg: Message) -> str:
     )
 
 
+def minicbor_hand_enum_def(enum: EnumDef) -> str:
+    name = enum.name
+    return (
+        f"pub enum {name} {{ A, B(u32), C {{ x: u32, y: bool }} }}\n\n"
+        f"impl minicbor::Encode<()> for {name} {{\n"
+        "    fn encode<W: minicbor::encode::Write>(&self, e: &mut minicbor::Encoder<W>, _: &mut ()) -> Result<(), minicbor::encode::Error<W::Error>> {\n"
+        "        match self {\n"
+        f'            {name}::A => {{ e.str("A")?; }}\n'
+        f'            {name}::B(v) => {{ e.map(1)?.str("B")?.u32(*v)?; }}\n'
+        f'            {name}::C {{ x, y }} => {{ e.map(1)?.str("C")?.map(2)?.str("x")?.u32(*x)?.str("y")?.bool(*y)?; }}\n'
+        "        }\n"
+        "        Ok(())\n    }\n}\n\n"
+        f"impl<'b> minicbor::Decode<'b, ()> for {name} {{\n"
+        "    fn decode(d: &mut minicbor::Decoder<'b>, _: &mut ()) -> Result<Self, minicbor::decode::Error> {\n"
+        "        match d.datatype()? {\n"
+        "            minicbor::data::Type::String => match d.str()? {\n"
+        f'                "A" => Ok({name}::A),\n'
+        '                _ => Err(minicbor::decode::Error::message("unknown variant")),\n'
+        "            },\n"
+        "            _ => {\n"
+        "                d.map()?;\n"
+        "                match d.str()? {\n"
+        f'                    "B" => Ok({name}::B(d.u32()?)),\n'
+        '                    "C" => {\n'
+        "                        let mut x = None;\n"
+        "                        let mut y = None;\n"
+        '                        let n = d.map()?.ok_or_else(|| minicbor::decode::Error::message("indefinite map"))?;\n'
+        "                        for _ in 0..n {\n"
+        '                            match d.str()? { "x" => x = Some(d.u32()?), "y" => y = Some(d.bool()?), _ => d.skip()? }\n'
+        "                        }\n"
+        f"                        Ok({name}::C {{ x: x.ok_or_else(|| minicbor::decode::Error::missing_value(0))?, y: y.ok_or_else(|| minicbor::decode::Error::missing_value(1))? }})\n"
+        "                    }\n"
+        '                    _ => Err(minicbor::decode::Error::message("unknown variant")),\n'
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    }\n}\n"
+    )
+
+
 MINICBOR_HAND_TEXTKEYS = Backend(
     name="minicbor-hand-textkeys",
     dependencies='minicbor = { version = "=2.3.1", default-features = false }',
     prelude="",
     struct_attrs="",
     field_attrs=lambda _field, _position: "",
+    enum_def=minicbor_hand_enum_def,
     impls=minicbor_hand_impls,
     roundtrip=MINICBOR_ROUNDTRIP,
 )

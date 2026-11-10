@@ -11,7 +11,7 @@ from typing import NamedTuple
 class Fit(NamedTuple):
     backend: str
     profile: str
-    base_n1: int
+    intercept: float
     per_type: float
     flash_n32: int
 
@@ -22,7 +22,7 @@ def fit(rows: list[dict[str, str]]) -> Fit:
     mean_y = sum(y for _, y in points) / len(points)
     slope = sum((x - mean_x) * (y - mean_y) for x, y in points) / sum((x - mean_x) ** 2 for x, _ in points)
     by_n = dict(points)
-    return Fit(rows[0]["backend"], rows[0]["profile"], by_n[1], slope, by_n[32])
+    return Fit(rows[0]["backend"], rows[0]["profile"], mean_y - slope * mean_x, slope, by_n[32])
 
 
 def fits(rows: Iterable[dict[str, str]]) -> list[Fit]:
@@ -34,7 +34,7 @@ def fits(rows: Iterable[dict[str, str]]) -> list[Fit]:
 
 
 if __name__ == "__main__":
-    print("| backend | profile | flash @ N=1 (B) | marginal B / message type | flash @ N=32 (B) |")
+    print("| backend | profile | fixed cost: fit intercept (B) | marginal B / message type | flash @ N=32 (B) |")
     print("|---|---|---:|---:|---:|")
     for f in fits(csv.DictReader(open(sys.argv[1]))):
-        print(f"| {f.backend} | {'opt-level=z' if f.profile == 'release' else 'opt-level=s'} | {f.base_n1:,} | {f.per_type:,.0f} | {f.flash_n32:,} |")
+        print(f"| {f.backend} | {'opt-level=z' if f.profile == 'release' else 'opt-level=s'} | {f.intercept:,.0f} | {f.per_type:,.0f} | {f.flash_n32:,} |")
