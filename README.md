@@ -6,28 +6,47 @@ Target spec is RFC 8949, which obsoletes RFC 7049 with an identical wire format;
 
 ## Verdict (2026-11-10)
 
-**Yes, a real but narrow gap exists, and nobody has started the thing you described.**
+**Yes, there is a gap, and no existing project matches the target.** The target is a born-no_std codec with alloc and no-alloc modes, no recursion, opt-in serde, and a table-driven native derive.
 
-- **No crate has a non-serde, no-alloc derive with text-string keys.** minicbor-derive is integer-keyed only. Oxide built an in-tree workaround (Hubris `microcbor`: encode-only, unpublished). minicbor's text-key PRs (#53, #57) and max-size PR (#56) have sat **8–9 months unreviewed** while the maintainer merged other work (`notes/upstream-status.md`).
-- **Serde works today but has holes for embedded.** minicbor-serde (born no_std, maintained) handles text-keyed, zero-copy, no-alloc decode.
-  - Its flash cost per message type (642 B) matches minicbor's own derive (663 B), so serde itself is not the problem (`notes/codesize.md`).
-  - What serde can't give: a compile-time max encoded size, flatten without alloc, deterministic encoding, or a recursion bound.
-- **Avoid:**
-  - serde_cbor and serde_cbor_2: no_std was retrofitted onto serde_cbor, the repo is archived, and both cost **4.8 KB per type**.
+- **Closest efforts, and why none fits** (`notes/upstream-status.md`, `notes/discovery-longtail.md`):
+  - **minicbor** is born no_std and passes 81/81 RFC 8949 Appendix A vectors, but its derive is integer-keyed only, generates code per type, and its derived decoders recurse without a depth bound. Its text-key PRs (#53, #57) and max-size PR (#56) have gone **8–9 months unreviewed** while other PRs were merged.
+  - **Hubris `microcbor`**: derives encode only, is in-tree, and is unpublished.
+  - **Thomasdezeeuw/cbor**: no_std, no alloc and opt-in serde, but it has no derive, was dumped in a single push on 2026-01-06, and is unpublished.
+  - **facet-cbor**: needs std, and facet-core has an unconditional `extern crate alloc`.
+  - **const-cbor**: no derive.
+  - **tps_cddl / cddlc**: CDDL schema code generators, not derives.
+- **Serde can be opt-in without guilt** (`notes/codesize.md`).
+  - Measured: a well-built serde backend (minicbor-serde) costs about the same flash per type as hand-written or derived per-type code. With enums and nesting it is 1,100 vs 1,163 B/type at opt-level z, and +8% at s.
+  - A badly built one (serde_cbor) costs 6–7.5× as much (about 9× hand-written).
+  - From the sources: serde_derive 1.0.229 still emits a per-struct `__Field` type and visitor. dtolnay's type-erased fix would need a change inside serde, and it is unshipped. Munns' table-driven gains are therefore out of reach through serde.
+- **The flash win comes only from table-driven derive.** Every CBOR crate generates code per type. Munns measured −38% total `.text` (−59% without enums) for postcard-forth vs serde on RP2040. For CBOR the gain is **unmeasured**, and that is the first thing to prototype.
+- **Missing from every no-alloc crate:**
+  - RFC 8949 §4.2.1 deterministic encoding (free for derived structs: sort keys at compile time);
+  - compile-time max encoded length;
+  - bounded, non-recursive decode.
+- **Avoid as foundations:**
+  - serde_cbor / serde_cbor_2: no_std was retrofitted in 2019, the original is archived, and they cost 4.8 KB per type.
   - ciborium: alloc is baked into its core.
-  - cbor-smol: partial CBOR (float encode panics; no tags; no indefinite-length decode), and recursion is unbounded.
-- **Missing from every no-alloc crate:** RFC 8949 §4.2.1 deterministic encoding, a compile-time max encoded length, and bounded decode recursion in derive.
-  - Two of these are cheap for derived structs: keys are static, so key order can be fixed at compile time.
-- **Unexplored for CBOR:** table-driven / type-erased derive, as in Munns' postcard-forth (−39% `.text` per type in his RP2040 measurement). Every CBOR crate uses per-type codegen. The measured floor for that approach is about 550 B per text-keyed type.
+  - cbor-smol: partial CBOR, unbounded recursion.
 
-### Paths, best first
+### Shape of the crate (`notes/design-sketch.md`)
 
-1. **A derive crate layered on minicbor's `Encode`/`Decode` traits**, published separately as Hubris did in-tree.
-   - minicbor was `no_std` from its first commit, passes all 81 RFC Appendix A vectors, and is the most-used CBOR crate in embedded Rust.
-   - Needs no upstream permission.
-   - Can ship text keys, `MaxCborLen`, alloc-free flatten, depth limits and compile-time §4.2.1 key order.
-   - Before writing code, ask on minicbor #52/#53 what the maintainer's "show stoppers" are, and ask Oxide whether `microcbor` is meant to be extracted.
-2. **Then, optionally, a table-driven backend** for that derive (const field tables plus one shared engine on top of minicbor's `Encoder`/`Decoder`), to test whether Munns' result carries over to CBOR.
+A **derive crate** plus a **small no_std runtime**: a proc-macro crate can export only macros.
+- **The derive** emits const descriptors:
+  - field offsets;
+  - pre-encoded, pre-sorted keys;
+  - nested-descriptor links;
+  - `MAX_ENCODED_LEN` and `MAX_DEPTH`.
+- **The runtime** holds one non-generic, iterative engine plus `alloc` and `serde` features.
+- **The alloc/no-alloc API** follows existing precedents: minicbor's `Write` impls, postcard's flavors and `MaxSize`, smoltcp's `managed::ManagedSlice`, and heapless 0.9's storage-generic `VecInner`.
+- **The wire layer** can start on minicbor's primitives. Two catches: minicbor writes floats at their declared width, so §4.2.1 output for float fields needs its own float path; and it accepts and emits the forbidden simple values `f8 14`…`f8 1f`.
+
+### People who have hit the same wall
+
+These are potential collaborators, not projects to contribute to:
+- Oxide, Hubris `microcbor`;
+- the authors of minicbor #57 (text keys), #56 (max length) and #71 (depth limit);
+- James Munns (postcard-forth).
 
 ## Index
 
@@ -36,8 +55,9 @@ Target spec is RFC 8949, which obsoletes RFC 7049 with an identical wire format;
 | `notes/rfc7049-vs-8949.md` | What changed between the RFCs; key-ordering divergence experiment |
 | `notes/crate-matrix.md`, `notes/crates/` | Evidence-tagged feature matrix for 10 crates |
 | `notes/discovery-longtail.md` | Long-tail crates, who uses what in embedded, demand signals |
-| `notes/upstream-status.md` | PR ages, maintainer activity, born-no_std vs retrofit |
-| `notes/codesize.md` | thumbv7m flash per message type, 7 backends |
+| `notes/upstream-status.md` | PR ages, maintainer activity, born-no_std vs retrofit, closed leads |
+| `notes/codesize.md` | thumbv7m flash per message type, flat and enum/nested shapes |
+| `notes/design-sketch.md` | Crate shape, alloc/no-alloc precedents, no-recursion plan, opt-in serde |
 | `notes/munns-serde-codesize.md` | James Munns' serde bloat analysis (SDR "A different serde") |
 | `sources/` | RFC texts, test vectors (submodule), transcripts |
 | `vendor/` | Upstream crate checkouts (submodules) |

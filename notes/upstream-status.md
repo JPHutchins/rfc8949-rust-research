@@ -37,3 +37,16 @@ Method: was `no_std` present in the first commit (`git rev-list --max-parents=0`
 | cbor-smol | 2021-01-31 | yes | "Re-extraction from `solo-bee`"; Trussed-specific subset |
 | ciborium | 2020-11-17 | yes, **but alloc unconditional** | no-alloc would be a retrofit; #90 open since 2023 |
 | serde_cbor | 2015-09-13 | **no**, added 2019-02-26 | retrofit; repo archived |
+
+## Leads closed (2026-11-10)
+
+| Lead | Finding | Evidence |
+|---|---|---|
+| facet-cbor (bearcove/vox) | std-only; deleted from vox on 2026-08-08 (`4b58849b`, "restore current Vox workspace from Facet"). No replacement CBOR crate found in facet-rs/facet or facet-rs/facet-format. facet-core has an unconditional `extern crate alloc;`, so any facet-based codec needs alloc by design. | `gh api repos/facet-rs/facet/contents/facet-core/src/lib.rs`; `git -C vendor/facet-cbor log --diff-filter=D` |
+| maximebedard/facet-cbor | Depends on facet 0.28; last push 2025-08-01; 0 stars | `gh api repos/maximebedard/facet-cbor` |
+| Thomasdezeeuw/cbor | Created and last pushed 2026-01-06 (43 commits in one push); 0 stars; unpublished (the crate name `cbor` belongs to BurntSushi's crate). no_std, **no alloc usage anywhere in `src/`**, opt-in `serde-v1` via `serde_core`, RFC 8949, about 1.9 kloc, **no derive**. | shallow clone; `grep -rn "alloc" src` (no hits) |
+| const-cbor | Zero-dependency no-alloc core with `const fn` methods and no derive; its serde adapter needs alloc | `notes/discovery-longtail.md` row |
+| tps_minicbor + tps_cddl (GlobalPlatform) | Schema-first CDDL code generation, not a type-first derive. Deterministic encoding needs `std`. | `notes/discovery-longtail.md` row |
+| dgtlrift/cddlc | CDDL code generator targeting minicbor or ciborium; unpublished | `notes/discovery-longtail.md` row |
+
+Not searched: Reddit, Rust Embedded Matrix archives. Codeberg search was rate-limited (HTTP 429), so only known Codeberg repos were checked.
