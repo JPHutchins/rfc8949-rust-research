@@ -58,6 +58,7 @@ These are potential collaborators, not projects to contribute to:
 | `notes/upstream-status.md` | PR ages, maintainer activity, born-no_std vs retrofit, closed leads |
 | `notes/codesize.md` | thumbv7m flash per message type, flat and enum/nested shapes |
 | `notes/design-sketch.md` | Crate shape, alloc/no-alloc precedents, no-recursion plan, opt-in serde |
+| `notes/rust-alloc-noalloc-state.md` | Rust-wide alloc/no-alloc state: `Allocator` stable in 1.100, Store API, heapless, polyfills |
 | `notes/munns-serde-codesize.md` | James Munns' serde bloat analysis (SDR "A different serde") |
 | `sources/` | RFC texts, test vectors (submodule), transcripts |
 | `vendor/` | Upstream crate checkouts (submodules) |
