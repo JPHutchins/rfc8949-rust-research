@@ -15,15 +15,17 @@ Target spec is RFC 8949, which obsoletes RFC 7049 with an identical wire format;
   - **facet-cbor**: needs std, and facet-core has an unconditional `extern crate alloc`.
   - **const-cbor**: no derive.
   - **tps_cddl / cddlc**: CDDL schema code generators, not derives.
-- **Serde can be opt-in without guilt** (`notes/codesize.md`).
+- **Serde costs no more flash than other per-type code** (`notes/codesize.md`).
   - Measured: a well-built serde backend (minicbor-serde) costs about the same flash per type as hand-written or derived per-type code. With enums and nesting it is 1,100 vs 1,163 B/type at opt-level z, and +8% at s.
+  - The comparison is like for like. A host test shows byte-identical wire output and cross-decoding between minicbor-serde and the hand-written impls for a message with an enum (all 3 variants) and two levels of nesting (`experiments/codesize/crosscheck`).
   - A badly built one (serde_cbor) costs 6–7.5× as much (about 9× hand-written).
+  - Opt-in serde can be depth-*limited* but never non-recursive: serde's visitors nest on the call stack by design.
   - From the sources: serde_derive 1.0.229 still emits a per-struct `__Field` type and visitor. dtolnay's type-erased fix would need a change inside serde, and it is unshipped. Munns' table-driven gains are therefore out of reach through serde.
 - **The flash win comes only from table-driven derive.** Every CBOR crate generates code per type. Munns measured −38% total `.text` (−59% without enums) for postcard-forth vs serde on RP2040. For CBOR the gain is **unmeasured**, and that is the first thing to prototype.
 - **Missing from every no-alloc crate:**
   - RFC 8949 §4.2.1 deterministic encoding (free for derived structs: sort keys at compile time);
   - compile-time max encoded length;
-  - bounded, non-recursive decode.
+  - non-recursive decode. Some crates bound the recursion (serde_cbor at 128, cbor4ii at 256); cbor-smol, and minicbor's derive/serde paths, are unbounded.
 - **Avoid as foundations:**
   - serde_cbor / serde_cbor_2: no_std was retrofitted in 2019, the original is archived, and they cost 4.8 KB per type.
   - ciborium: alloc is baked into its core.
@@ -38,6 +40,7 @@ A **derive crate** plus a **small no_std runtime**: a proc-macro crate can expor
   - nested-descriptor links;
   - `MAX_ENCODED_LEN` and `MAX_DEPTH`.
 - **The runtime** holds one non-generic, iterative engine plus `alloc` and `serde` features.
+- **Trade-off against "fully type safe":** a type-erased engine walking offsets and function pointers needs `unsafe`. Munns called postcard-forth "wildly unsafe". The aim is `unsafe` confined to the engine and derive output, behind a safe public API whose types are checked at compile time.
 - **The alloc/no-alloc API** follows existing precedents: minicbor's `Write` impls, postcard's flavors and `MaxSize`, smoltcp's `managed::ManagedSlice`, and heapless 0.9's storage-generic `VecInner`.
 - **The wire layer** can start on minicbor's primitives. Two catches: minicbor writes floats at their declared width, so §4.2.1 output for float fields needs its own float path; and it accepts and emits the forbidden simple values `f8 14`…`f8 1f`.
 

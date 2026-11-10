@@ -7,6 +7,10 @@ Not CBOR-specific. Every item was checked against the upstream issue, PR, crate 
 - **New: the `Allocator` trait is stabilized for Rust 1.100.0.** rust-lang/rust#156882 "alloc: stabilise `Allocator`" was merged 2026-09-23 with milestone 1.100.0, and tracking issue #32838 was closed as completed.
   - Release is expected around 2026-11-12, two days from now. That date is inferred from the six-week cadence; the milestone has no due date.
   - RalfJung, on #32838 (2026-09-23): "If nothing goes wrong, then yes it will" ship in 1.100.
+  - Checked on rust-lang/rust's `stable` branch (`src/version` = 1.100.0):
+    - `library/core/src/alloc/mod.rs:196`: `#[stable(feature = "allocator_api", since = "1.100.0")]` on `pub const unsafe trait Allocator`;
+    - `library/alloc/src/vec/mod.rs:934`: the same attribute on `Vec::with_capacity_in`.
+    - So it is on the release branch. Only the public release itself is still pending.
 - **The stable MVP surface** (from the PR's stabilisation report):
   - `unsafe trait Allocator` with `allocate`, `deallocate`, `allocate_zeroed`, `grow`, …;
   - `Global`;
@@ -21,7 +25,7 @@ Not CBOR-specific. Every item was checked against the upstream issue, PR, crate 
   - the `Clone`-related safety marker trait.
 - **Embedded catch (ran it):** linking the `alloc` crate still requires a `#[global_allocator]`.
   - A `#![no_std]` thumbv7m binary with only `extern crate alloc` fails: "no global memory allocator found but one is required; link to std or add `#[global_allocator]`" (rustc 1.95.0).
-  - So even after 1.100, a heapless firmware using `Vec<T, MyArena>` must register a global allocator, at minimum one that always fails, until collections move to `core`.
+  - **Tested on 1.95 only.** Nothing in the 1.100 stabilization report removes the requirement, and "collections into `core`" is still open on the roadmap, so it most likely still holds. Under that assumption, even after 1.100 a heapless firmware using `Vec<T, MyArena>` must register a global allocator, at minimum one that always fails, until collections move to `core`.
 
 ## The toolbox, from most to least established
 

@@ -19,6 +19,14 @@ A `proc-macro = true` crate can export only macros, so the design needs two crat
 
 The per-type generic surface shrinks to a thin typed wrapper around the type-erased engine. Munns' postcard-forth measured that design at −38% total `.text`, or −59% without enums (`sources/munns/postcard-forth-rp2040-results-2024-06.md`: 640,456→395,712 B and 550,012→223,492 B). He also notes that enums still needed generated code.
 
+## Trade-off: table-driven vs "fully type safe" *(inference)*
+
+- A type-erased engine walking `offset_of!` offsets and function pointers must use `unsafe`: raw-pointer field access, and per-kind casts behind function pointers. Munns called postcard-forth "wildly unsafe" (`notes/munns-serde-codesize.md`).
+- The type safety the user wants can still live at the API boundary.
+  - The derive generates descriptors only from the type definition it sees, so offsets and kinds agree by construction.
+  - The public API is `fn decode<T: Cbor>(…) -> Result<T, _>`.
+  - `unsafe` stays confined to the engine and generated consts, which makes it a Miri and fuzzing target.
+
 ## alloc / no-alloc: verified precedents
 
 | Pattern | Precedent | Evidence |
@@ -54,6 +62,7 @@ On the decode side, field types choose the storage, so the derive does not care:
 
 - serde_derive 1.0.229 still generates a `__Field` identifier type and a visitor per struct (`serde_derive/src/de/struct_.rs`, `identifier.rs`). Every derived type therefore instantiates the format's `Deserializer` methods again. A format crate can keep those methods lean, as minicbor-serde does, but cannot remove the per-type instantiations.
 - dtolnay's preferred fix is "handing off a kind of type-erased bytecode for the deserializer to evaluate … Deserialize impls become free — basically a single `static`" (`sources/munns/serde-pr2250-dtolnay-review-2023-08-06.txt`). That would be a change inside serde, and it is unshipped.
+- **The serde path cannot be non-recursive.** `Deserialize::deserialize` → `Visitor::visit_map` → nested `Deserialize::deserialize` uses the call stack by construction. An opt-in serde layer can enforce a depth *limit* (as serde_cbor does at 128), but cannot use the iterative engine.
 - So the native derive is the table-driven fast path, and a `serde` feature implements `Serializer` / `Deserializer` on the same runtime so existing serde types still work, at serde's per-type cost. Measured cost: `notes/codesize.md`.
 
 ## Reuse minicbor's wire layer?

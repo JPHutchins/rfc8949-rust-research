@@ -69,7 +69,9 @@ Regenerate with `python3 gen.py --shape flat|rich` and `python3 fit.py results-<
 
 ## Caveats
 
-- Binaries are never executed, and wire equivalence between backends is not checked for the generated types. The probes in `experiments/probes/` verify exact bytes only for a 4-field flat struct.
-- cbor-smol links enum and nested code, but its runtime support for struct variants was not tested. Its matrix gaps also apply: float encode panics, no tags, unbounded recursion.
+- The thumbv7m binaries are never executed. Behaviour was checked on the host instead (`experiments/codesize/crosscheck`, `cargo test`) for rich `Msg5` (an enum field plus two levels of nesting, all 3 variants):
+  - **minicbor-serde and the hand-written impls give byte-identical output, and each decodes the other's bytes.** The size comparison is therefore like for like.
+  - **cbor-smol round-trips its own bytes, but encodes enums by variant index** (`00`, `[1, 42]`, `[2, {…}]`) rather than text tags. Its enum wire format, and so its size, is not comparable. Its matrix gaps also apply: float encode panics, no tags, unbounded recursion.
+  - The other 31 generated types are covered by the same generator code but were not individually exercised. The flat-shape probes in `experiments/probes/` verify exact bytes for a 4-field struct.
 - `minicbor-hand-textkeys` approximates what a text-key derive would emit. It is not minicbor PR #57's actual output.
 - One target and one toolchain, with round-trips only (no encode-only or decode-only measurement).
