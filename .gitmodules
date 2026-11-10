@@ -1,0 +1,3 @@
+[submodule "sources/test-vectors"]
+	path = sources/test-vectors
+	url = https://github.com/cbor/test-vectors.git
