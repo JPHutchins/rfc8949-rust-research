@@ -63,6 +63,6 @@ These are potential collaborators, not projects to contribute to:
 | `notes/design-sketch.md` | Crate shape, alloc/no-alloc precedents, no-recursion plan, opt-in serde |
 | `notes/rust-alloc-noalloc-state.md` | Rust-wide alloc/no-alloc state: `Allocator` stable in 1.100, Store API, heapless, polyfills |
 | `notes/munns-serde-codesize.md` | James Munns' serde bloat analysis (SDR "A different serde") |
-| `sources/` | RFC texts, test vectors (submodule), transcripts |
+| `sources/` | RFC texts (IETF Trust), RFC test vectors (submodule). Third-party talks, posts and transcripts are linked from `notes/`, not republished |
 | `vendor/` | Upstream crate checkouts (submodules) |
 | `experiments/` | Code-size harness, probes, Appendix A conformance, key-ordering script |

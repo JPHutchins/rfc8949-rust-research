@@ -17,7 +17,7 @@ A `proc-macro = true` crate can export only macros, so the design needs two crat
 | `foo-derive` (most of the logic) | Per type, emits **const data, not code**:<br>• a descriptor with field kinds;<br>• `core::mem::offset_of!` offsets;<br>• pre-encoded key bytes, sorted bytewise at compile time per RFC 8949 §4.2.1;<br>• links to nested descriptors;<br>• `const MAX_ENCODED_LEN` and `const MAX_DEPTH`. |
 | `foo` (`#![no_std]`) | • Wire primitives;<br>• **one** non-generic, iterative engine that walks descriptors;<br>• `Write`/`Read` sinks;<br>• features `alloc` and `serde`. |
 
-The per-type generic surface shrinks to a thin typed wrapper around the type-erased engine. Munns' postcard-forth measured that design at −38% total `.text`, or −59% without enums (`sources/munns/postcard-forth-rp2040-results-2024-06.md`: 640,456→395,712 B and 550,012→223,492 B). He also notes that enums still needed generated code.
+The per-type generic surface shrinks to a thin typed wrapper around the type-erased engine. Munns' postcard-forth measured that design at −38% total `.text`, or −59% without enums (<https://github.com/jamesmunns/postcard-forth/blob/main/source/rp2040-demo/results.md>: 640,456→395,712 B and 550,012→223,492 B). He also notes that enums still needed generated code.
 
 ## Trade-off: table-driven vs "fully type safe" *(inference)*
 
@@ -61,7 +61,7 @@ On the decode side, field types choose the storage, so the derive does not care:
 ## Serde: make it opt-in
 
 - serde_derive 1.0.229 still generates a `__Field` identifier type and a visitor per struct (`serde_derive/src/de/struct_.rs`, `identifier.rs`). Every derived type therefore instantiates the format's `Deserializer` methods again. A format crate can keep those methods lean, as minicbor-serde does, but cannot remove the per-type instantiations.
-- dtolnay's preferred fix is "handing off a kind of type-erased bytecode for the deserializer to evaluate … Deserialize impls become free — basically a single `static`" (`sources/munns/serde-pr2250-dtolnay-review-2023-08-06.txt`). That would be a change inside serde, and it is unshipped.
+- dtolnay's preferred fix is "handing off a kind of type-erased bytecode for the deserializer to evaluate … Deserialize impls become free — basically a single `static`" (<https://github.com/serde-rs/serde/pull/2250#pullrequestreview-1564212707>). That would be a change inside serde, and it is unshipped.
 - **The serde path cannot be non-recursive.** `Deserialize::deserialize` → `Visitor::visit_map` → nested `Deserialize::deserialize` uses the call stack by construction. An opt-in serde layer can enforce a depth *limit* (as serde_cbor does at 128), but cannot use the iterative engine.
 - So the native derive is the table-driven fast path, and a `serde` feature implements `Serializer` / `Deserializer` on the same runtime so existing serde types still work, at serde's per-type cost. Measured cost: `notes/codesize.md`.
 
