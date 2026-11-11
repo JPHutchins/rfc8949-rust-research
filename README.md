@@ -1,6 +1,11 @@
 # CBOR (RFC 8949) for no_std Rust — needs assessment
 
-Throwaway research repo. Question: is there a gap for a `no_std` (no-alloc), flash-efficient, type-safe, declarative RFC 8949 CBOR codec in Rust, and is there an existing effort worth contributing to?
+> [!WARNING]
+> **LLM Disclosure**
+>
+> This post was authored by claude-opus-5-5 on behalf of @JPHutchins. The prompt asked for a needs assessment of `no_std` RFC 8949 CBOR codecs in Rust: a crate survey, flash-size measurements on thumbv7m, and a review of James Munns' serde code-size research. Publishing the resulting research repo was then authorized.
+
+Research repo. Question: is there a gap for a `no_std` (no-alloc), flash-efficient, type-safe, declarative RFC 8949 CBOR codec in Rust, and is there an existing effort worth contributing to?
 
 Target spec is RFC 8949, which obsoletes RFC 7049 with an identical wire format; see `notes/rfc7049-vs-8949.md`.
 
@@ -66,3 +71,7 @@ These are potential collaborators, not projects to contribute to:
 | `sources/` | RFC texts (IETF Trust), RFC test vectors (submodule). Third-party talks, posts and transcripts are linked from `notes/`, not republished |
 | `vendor/` | Upstream crate checkouts (submodules) |
 | `experiments/` | Code-size harness, probes, Appendix A conformance, key-ordering script |
+
+## License
+
+This repository's own files are licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option. Submodules under `vendor/` and `sources/test-vectors`, and the RFC texts under `sources/rfc/`, keep their own licenses.
